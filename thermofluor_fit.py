@@ -127,14 +127,16 @@ def generate_plots(y=None, dy=None, ddy=None, grouped=True, step=2, cols=4, dele
             title = ''.join(f'{t} ' for t in titles)
 #             title = title + (f'Tm (avg) = {np.average(melt_temps)}')
             ax.set_title(title)
-            legend = ax.legend(loc='upper right', shadow=True)
+            if show_legend:
+                legend = ax.legend(loc='upper right', shadow=True)
             i += step
         except IndexError: #more subplots than data available => delete subplot
             fig.delaxes(ax)
     plt.subplots_adjust(hspace=0.5)
     fig.set_size_inches(20,10)
     fig.tight_layout()
-    fig.savefig(figure_name, dpi=300, linewidth=0.0)
+    if save_figure:        
+        fig.savefig(figure_name, dpi=300, linewidth=0.0)
     if show_plot:
         plt.show()
 
@@ -172,74 +174,69 @@ def logistic_fit(T, T0, k, L):
     y = L / (1 + np.exp(T-T0))
     return y 
 
+def group_by(grouping):
+    order = []
+    valid_groupings = ['rows', 'columns', 'a_b', '1_2']
+    if grouping not in valid_groupings:
+        msg = f'Unrecognised grouping type: {grouping}.\n Valid options are "lines", "columns", "a_b", "1_2"'
+        raise ValueError(msg)
+    elif grouping == 'columns':
+        for n in range (first_well, last_well+1):
+            for l in letters:
+                n = str(n).zfill(2)
+                order.append(f'{l}{n}')
+        step = 8
+        cols = 6
+    elif grouping == 'rows':
+        for l in letters:
+            for n in range(first_well,last_well+1):
+                n = str(n).zfill(2)
+                order.append(f'{l}{n}')
+        step = 6
+        cols = 8
+    elif grouping == 'a_b': #(A1,B1; C1,D1, etc.)
+        for t in range(1,7):
+            for n in [['A','B'], ['C','D'], ['E','F'], ['G','H']]:
+                for l in n:
+                    order.append(f'{l}{str(t).zfill(2)}')
+        step = 2
+        cols = 4
+    elif grouping == '1_2': #(A1,A2; A3,A4; etc.)
+        for t in [['A','B'], ['C','D'], ['E','F'], ['G','H']]:
+            for n in range(1,7):
+                for l in t:
+                    n = str(n).zfill(2)
+                    order.append(f'{l}{n}')
+        step = 2
+        cols = 6
+    return order, step, cols
+
 if __name__ == '__main__':
     ### config ###
     working_dir = 'test/data'
     input_file = os.path.join(working_dir, 'Complex_mix.xlsx')
     #specifyng replicates to graph together
-    order = []
-    
     letters = ['A','B','C','D','E','F','G','H']
     first_well = 1
     last_well = 6
-    normalize=1
+    normalize=0
     make_plots = 1 #debug of program workflow
     draw_plots = 1 #debug of program workflow
-    plot_y=0
-    plot_dy=1
+    plot_y=1
+    plot_dy=0
     plot_ddy=0
     remove_wells = False
     step=1
-    cols=4
-    figure_name = 'Complex_mix_02.png'
-    show_plot = True
-     
-#     duplicate position - uncomment relevant one
-#     A1-B1, A2-B2, etc.
-#     for t in [['A','B'], ['C','D'], ['E','F'], ['G','H']]:
-#         for n in range(1,7):
-#             for l in t:
-#                 n = str(n).zfill(2)
-#                 order.append(f'{l}{n}')
-#     step=2
-#     duplicate position - uncomment relevant one
-#     A1-B1, C1-D1, etc.
-
-    for t in range(1,7):
-        for n in [['A','B'], ['C','D'], ['E','F'], ['G','H']]:
-            for l in n:
-                order.append(f'{l}{str(t).zfill(2)}')
-    step=2
-
-#     #6 duplicates on a line
-#     order = []
-#     for l in letters:
-#         for n in range(first_well,last_well+1):
-#             n = str(n).zfill(2)
-#             order.append(f'{l}{n}')
-#     step=6
+    save_figure = 0
+    figure_name = 'Complex_mix_05.png'
+    show_plot = 1
+    show_legend = 1
     
-#     group by column
-#     order = []
-#     for n in range (first_well, last_well+1):
-#         for l in letters:
-#             n = str(n).zfill(2)
-#             order.append(f'{l}{n}')
-#     step = 8
-    
-    #remove lines 
-#     lines_to_remove = ['C','D','E','F','G','H']
-#     remove_wells = []
-#     for l in lines_to_remove:
-#         for n in range(first_well,last_well+1):
-#             n = str(n).zfill(2)
-#             remove_wells.append(f'{l}{n}')
-#     print(remove_wells)
-#     step=6
-    
+    #valid options: rows, columns, 1_2 (A1,A2; A3,A4; etc.), a_b (A1,B1; C1,D1, etc.)
+    order, step, cols = group_by('a_b')
     delete_curves = []
     #uncomment to delete curves
-    delete_curves = ['A06','B06','C06','D06', 'E06','F06', 'H06', 'G06']
+#     delete_curves = ['A06','B06','C06','D06', 'E06','F06', 'H06', 'G06']
     
     
     main(order=order, normalize=normalize, plot_y=plot_y, plot_dy=plot_dy,

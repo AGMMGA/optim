@@ -12,14 +12,14 @@ from sklearn import preprocessing
 
 
 def main(order=False, normalize=False, plot_y=True, plot_dy=True, plot_ddy=True,
-         make_plots=True, step=2, remove_wells=0):
+         make_plots=True, step=2, remove_wells=0, cols=4, delete=[]):
     
     df = pd.read_excel(input_file)
     
     # normalize min/max on y values
     if normalize:
         df = _normalize(df)
-    
+        
     if make_plots:
         #order the dataframe per well
         if order and type(order) == type([]):
@@ -30,22 +30,25 @@ def main(order=False, normalize=False, plot_y=True, plot_dy=True, plot_ddy=True,
         else:
             y = df
             order = list(y.columns)
-        
-        #remove unwanted columns at the end
+        #remove unwanted columns
         if remove_wells:
             keep = [i for i in order if i not in remove_wells]
             y = y[keep]
+        #remove unwanted wells by adding zeroes instead
+        for well in delete:
+            y[well] = np.zeros((y.shape[0], 1))
         #smooth data
-        y_smooth = y.rolling(window = 5).mean()
+        y_smooth = y.rolling(window = 1).mean()
         #calculate 1st derivative, smoothed
         dy = y_smooth.diff()
         if normalize:
-            dy = _normalize(dy)    
+            dy = _normalize(dy)
+            dy=dy/2.5 #makes for easier read   
         #calculate 2nd derivative, smoothed
         ddy = dy.diff()
         if normalize:
             ddy = _normalize(ddy)
-        
+            ddy = ddy/2.5
         #choose what to plot
         if not plot_y:
             y = None
@@ -55,14 +58,15 @@ def main(order=False, normalize=False, plot_y=True, plot_dy=True, plot_ddy=True,
             ddy=None
         
         #make the actual plots
-        generate_plots(y, dy, ddy, grouped=True, step=step)
+        if draw_plots:
+            generate_plots(y, dy, ddy, grouped=True, step=step, cols=cols, delete=delete)
 
 def _normalize(df):
     
     df = (df - df.min()) / (df.max() - df.min())
     return df
 
-def generate_plots(y=None, dy=None, ddy=None, grouped=True, step=2):
+def generate_plots(y=None, dy=None, ddy=None, grouped=True, step=2, cols=4, delete=[]):
     
     #check that there is something to plot
     try:
@@ -75,25 +79,23 @@ def generate_plots(y=None, dy=None, ddy=None, grouped=True, step=2):
         raise ValueError(f'Cannot plot all separate graphs with step = {step}')
     
     #get shape of graph grid
-    datasets = a.shape[1]
-    if datasets/step <= 4:
+    datasets = a.shape[1] -len(delete_curves)
+    if datasets/step <= cols:
         columns = int(datasets/step)
     else:
-        columns = 4
-        
+        columns = cols
     if not grouped:
-        rows = int(ceil(datasets/4))
+        rows = int(ceil(datasets/cols))
     else:
-        rows = ceil(datasets/4/step)
-        
-    fig, axes = plt.subplots(nrows=rows, ncols=columns, squeeze=False) #squeeze = False => always return a 2d np.array(), even for ncols=1, nrows=1
+        rows = ceil(datasets/cols/step)
+    fig, axes = plt.subplots(nrows=rows, ncols=columns, squeeze=False)  #squeeze = False => always return a 2d np.array(), even for ncols=1, nrows=1
     
-    y_cmap = plt.get_cmap('Blues')
-    dy_cmap = plt.get_cmap('Greens')
+    y_cmap = plt.get_cmap('gist_rainbow')
+    dy_cmap = plt.get_cmap('Blues')
     ddy_cmap = plt.get_cmap('Reds')
     y_line_colors = y_cmap(np.linspace(0,1,step))
-    dy_line_colors = dy_cmap(np.linspace(0,1,step))
-    ddy_line_colors = ddy_cmap(np.linspace(0,1,step))
+    dy_line_colors = dy_cmap(np.linspace(0.5,0.75,step))
+    ddy_line_colors = ddy_cmap(np.linspace(0.25,0.75,step))
     
     i = 0
     for ax in axes.flatten(): #axes.reshape(-1) only works if multiple subplots are available)
@@ -104,29 +106,37 @@ def generate_plots(y=None, dy=None, ddy=None, grouped=True, step=2):
             for sub in range(step):
                 t = i+sub
                 title = a.iloc[:,t].name
+                if title in delete: #we have chosen not to plot this series
+                    continue
                 titles.append(title)
+                melt_temps = []
                 if y is not None: #df truth is ambiguous in pandas
                     _y = y.iloc[:,t]
 #                     py = _y.plot(ax=ax, color='blue', use_index=True)
                     py = _y.plot(ax=ax, color=y_line_colors[sub], use_index=True,
-                                 label=f'Int ({title})')
+                                 label=title)
                 if dy is not None:
                     _dy = dy.iloc[:,i+sub]
                     pdy = _dy.plot(ax=ax, x = dy.index, color=dy_line_colors[sub],
-                     linestyle='dotted')
+                     linestyle='dashed')
+                    melt_temp = max(dy)
                 if ddy is not None:
                     _ddy = ddy.iloc[:,i+sub] 
                     pddy = _ddy.plot(ax=ax, color=ddy_line_colors[sub],
-                                      linestyle='dashed')
+                                      linestyle='dotted')
             title = ''.join(f'{t} ' for t in titles)
+#             title = title + (f'Tm (avg) = {np.average(melt_temps)}')
             ax.set_title(title)
-#             legend = ax.legend(loc='upper right', shadow=True)
+            legend = ax.legend(loc='upper right', shadow=True)
             i += step
         except IndexError: #more subplots than data available => delete subplot
             fig.delaxes(ax)
     plt.subplots_adjust(hspace=0.5)
-#     fig.savefig('figure.png', figsize=(20,20), dpi=300, linewidth=0.0)
-    plt.show()
+    fig.set_size_inches(20,10)
+    fig.tight_layout()
+    fig.savefig(figure_name, dpi=300, linewidth=0.0)
+    if show_plot:
+        plt.show()
 
 def reorder_wells(unordered_frame, custom_order):
     '''
@@ -146,7 +156,7 @@ def reorder_wells(unordered_frame, custom_order):
         '''
         raise ValueError(msg)
     f = unordered_frame.copy()
-    f.columns = custom_order
+    f = f[custom_order]
     return f
 
 def thermo_fit(T, m, n, r, hm, tm):
@@ -165,7 +175,7 @@ def logistic_fit(T, T0, k, L):
 if __name__ == '__main__':
     ### config ###
     working_dir = 'test/data'
-    input_file = os.path.join(working_dir, 'ferritin_repro_test_conc_series.xlsx')
+    input_file = os.path.join(working_dir, 'Complex_mix.xlsx')
     #specifyng replicates to graph together
     order = []
     
@@ -174,39 +184,64 @@ if __name__ == '__main__':
     last_well = 6
     normalize=1
     make_plots = 1 #debug of program workflow
-    plot_y=1
-    plot_dy=0
-    plot_ddy=1
-    remove_wells = 0
-    step=6
+    draw_plots = 1 #debug of program workflow
+    plot_y=0
+    plot_dy=1
+    plot_ddy=0
+    remove_wells = False
+    step=1
+    cols=4
+    figure_name = 'Complex_mix_02.png'
+    show_plot = True
      
-    #duplicate position - uncomment relevant one
-    #A1-B1, A2-B2, etc.
+#     duplicate position - uncomment relevant one
+#     A1-B1, A2-B2, etc.
 #     for t in [['A','B'], ['C','D'], ['E','F'], ['G','H']]:
 #         for n in range(1,7):
-#             for l in t:#,'C','D','E','F','G','H']:
+#             for l in t:
 #                 n = str(n).zfill(2)
 #                 order.append(f'{l}{n}')
 #     step=2
+#     duplicate position - uncomment relevant one
+#     A1-B1, C1-D1, etc.
+
+    for t in range(1,7):
+        for n in [['A','B'], ['C','D'], ['E','F'], ['G','H']]:
+            for l in n:
+                order.append(f'{l}{str(t).zfill(2)}')
+    step=2
 
 #     #6 duplicates on a line
-    order = []
-    for l in letters:
-        for n in range(first_well,last_well+1):
-            n = str(n).zfill(2)
-            order.append(f'{l}{n}')
-    step=6
+#     order = []
+#     for l in letters:
+#         for n in range(first_well,last_well+1):
+#             n = str(n).zfill(2)
+#             order.append(f'{l}{n}')
+#     step=6
+    
+#     group by column
+#     order = []
+#     for n in range (first_well, last_well+1):
+#         for l in letters:
+#             n = str(n).zfill(2)
+#             order.append(f'{l}{n}')
+#     step = 8
     
     #remove lines 
-#     lines_to_remove = []
+#     lines_to_remove = ['C','D','E','F','G','H']
 #     remove_wells = []
 #     for l in lines_to_remove:
 #         for n in range(first_well,last_well+1):
 #             n = str(n).zfill(2)
 #             remove_wells.append(f'{l}{n}')
+#     print(remove_wells)
 #     step=6
+    
+    delete_curves = []
+    #uncomment to delete curves
+    delete_curves = ['A06','B06','C06','D06', 'E06','F06', 'H06', 'G06']
     
     
     main(order=order, normalize=normalize, plot_y=plot_y, plot_dy=plot_dy,
          plot_ddy=plot_ddy, make_plots=make_plots, step=step, 
-         remove_wells=remove_wells)
+         remove_wells=remove_wells, cols=cols, delete=delete_curves)

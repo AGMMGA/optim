@@ -23,8 +23,8 @@ def main():
     workbook = writer.book
     number_format = workbook.add_format({'num_format': '#,##0.00'})
     
-    for input in files:
-        with open(input, 'rb') as f:
+    for input_ in files:
+        with open(input_, 'rb') as f:
             df = pd.read_csv(f, encoding = "ISO-8859-1")
         df.applymap(conv)
         sheet_title = df.columns[1].split()[0]
@@ -96,6 +96,7 @@ def main():
 
 if __name__ == '__main__':
     ####### Config #######
-    working_dir = os.path.abspath('test/data')
+    working_dir = os.path.abspath('/home/andrea/Desktop/optim')
+    print(os.path.isdir(working_dir))
     outfile = os.path.join(working_dir, 'out.xlsx')
     main()
